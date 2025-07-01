@@ -13,9 +13,8 @@ from dotenv import load_dotenv
 
 from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.llms import HuggingFacePipeline
+from langchain_ollama import OllamaLLM
 from langchain.chains import RetrievalQA
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 # Cargar variables de entorno
 load_dotenv()
@@ -33,11 +32,10 @@ logger = logging.getLogger(__name__)
 # Cargar configuración desde variables de entorno
 faiss_db_path = os.getenv('FAISS_DB_PATH', '/home/alejandrocr/llm/faiss_db')
 embeddings_model_name = os.getenv('EMBEDDINGS_MODEL_NAME', 'paraphrase-MiniLM-L6-v2')
-llm_model_name = os.getenv('LLM_MODEL_NAME', 'deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B')
+ollama_model_name = os.getenv('OLLAMA_MODEL_NAME', 'llama2')
+ollama_base_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
 retrieval_k = int(os.getenv('RETRIEVAL_K', '4'))
-max_new_tokens = int(os.getenv('MAX_NEW_TOKENS', '150'))
 temperature = float(os.getenv('TEMPERATURE', '0.7'))
-do_sample = os.getenv('DO_SAMPLE', 'true').lower() == 'true'
 
 # Cargar el índice FAISS desde disco si existe
 if not os.path.exists(faiss_db_path):
@@ -55,27 +53,16 @@ faiss_db = FAISS.load_local(
 # Crear el retriever a partir del VectorStore
 retriever = faiss_db.as_retriever(search_kwargs={'k': retrieval_k})
 
-# Cargar el modelo de lenguaje usando transformers
-llm_model = AutoModelForCausalLM.from_pretrained(llm_model_name)
-tokenizer = AutoTokenizer.from_pretrained(llm_model_name)
-
-# Crear un pipeline de HuggingFace
-transformers_pipeline = pipeline(
-    'text-generation',
-    model=llm_model,
-    tokenizer=tokenizer,
-    max_new_tokens=max_new_tokens,
-    do_sample=do_sample,
-    temperature=temperature,
-    pad_token_id=tokenizer.eos_token_id
+# Configurar el modelo Ollama
+ollama_llm = OllamaLLM(
+    model=ollama_model_name,
+    base_url=ollama_base_url,
+    temperature=temperature
 )
-
-# Envolver el pipeline para usarlo con LangChain
-huggingface_pipeline = HuggingFacePipeline(pipeline=transformers_pipeline)
 
 # Crear la cadena RAG con RetrievalQA
 qa = RetrievalQA.from_chain_type(
-    llm=huggingface_pipeline,
+    llm=ollama_llm,
     retriever=retriever,
     chain_type='stuff',
     return_source_documents=True
@@ -85,5 +72,6 @@ qa = RetrievalQA.from_chain_type(
 question = args.question
 logger.info('Pregunta: "%s"', question)
 
-answer = qa.run(question)
-print(answer)
+answer = qa.invoke({'query': question})
+result = answer['result']
+print(result)
