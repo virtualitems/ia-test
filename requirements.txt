@@ -10,3 +10,6 @@ pypdf
 python-dotenv
 sentence-transformers
 transformers
+llama-index
+llama-index-llms-ollama
+llama-index-embeddings-ollama
